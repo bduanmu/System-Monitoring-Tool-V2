@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "memory-info.h"
 #include "cpu-info.h"
@@ -40,7 +42,7 @@ void processArguments(int argc, char* argv[], int arguments[5]) {
 
     // If samples or delay are invalid, set to default value.
     if (arguments[0] <= 0) arguments[0] = STANDARD_SAMPLES;
-    if (arguments[1] <= 0) arguments[1] = STANDARD_TDELAY;
+    if (arguments[1] < 10000) arguments[1] = STANDARD_TDELAY;
 
     // If neither memory, CPU, nor cores are specified, show all three. 
     if (!arguments[2] && !arguments[3] && !arguments[4]) {
@@ -64,6 +66,40 @@ void delay(unsigned int microseconds) {
     } while (elapsed < microseconds);
 }
 
+void memoryProcess(int fd, int samples, int tdelay) {
+    long memory_info[2];
+    for (int i = 0; i < samples; i++) {
+        retrieveMemoryData(memory_info);
+        write(fd, memory_info, sizeof(memory_info));
+        delay(tdelay);
+    }
+    close(fd);
+    exit(0);
+}
+
+void cpuProcess(int fd, int samples, int tdelay) {
+    long long previous_cpu_usage[10], current_cpu_usage[10];
+    retrieveCPUData(current_cpu_usage);
+    delay(tdelay);
+    for (int i = 0; i < samples; i++) {
+        memcpy(previous_cpu_usage, current_cpu_usage, sizeof(previous_cpu_usage));
+        retrieveCPUData(current_cpu_usage);
+        double utilization = processCPUUtilization(previous_cpu_usage, current_cpu_usage);
+        write(fd, &utilization, sizeof(utilization));
+        delay(tdelay);
+    }
+    close(fd);
+    exit(0);
+}
+
+void coresProcess(int fd) {
+    long cores_info[2];
+    retrieveCoresData(cores_info);
+    write(fd, cores_info, sizeof(cores_info));
+    close(fd);
+    exit(0);
+}
+
 int main(int argc, char* argv[]) {
     // Disable output buffering.
     setbuf(stdout, NULL);
@@ -83,69 +119,62 @@ int main(int argc, char* argv[]) {
     printf(MOVE_CURSOR_TOP_LEFT);
     printf("Nbr of samples: %d -- every %d microSecs (%.3f secs)", samples, tdelay, tdelay / (float)(METRIC_CONVERSION * METRIC_CONVERSION));
 
-
-    // memory_info stores [total_ram, free_ram, shared_ram, buffer_ram].
-    long memory_info[2];
-
-    // previous_cpu_usage and current_cpu_usage stores CPU times in the following order: 
-    // [user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice].
-    long long previous_cpu_usage[10];
-    long long current_cpu_usage[10];
-
-
+    int memory_pipe[2], cpu_pipe[2], cores_pipe[2];
+    pid_t memory_pid = -1, cpu_pid = -1, cores_pid = -1;
+    
+    if (show_memory) {
+        pipe(memory_pipe);
+        if ((memory_pid = fork()) == 0) {
+            close(memory_pipe[0]);
+            memoryProcess(memory_pipe[1], samples, tdelay);
+        }
+        close(memory_pipe[1]);
+    }
     if (show_cpu) {
-        // Retrieve initial CPU data.
-        retrieveCPUData(current_cpu_usage);
+        pipe(cpu_pipe);
+        if ((cpu_pid = fork()) == 0) {
+            close(cpu_pipe[0]);
+            cpuProcess(cpu_pipe[1], samples, tdelay);
+        }
+        close(cpu_pipe[1]);
+    }
+    if (show_cores) {
+        pipe(cores_pipe);
+        if ((cores_pid = fork()) == 0) {
+            close(cores_pipe[0]);
+            coresProcess(cores_pipe[1]);
+        }
+        close(cores_pipe[1]);
+    }
 
-        // Wait tdelay microseconds.
+    for (int i = 0; i < samples; i++) {
+        if (show_memory) {
+            long memory_info[2];
+            read(memory_pipe[0], memory_info, sizeof(memory_info));
+            double total_memory = 0, used_memory = 0;
+            processMemoryUtilization(memory_info, &total_memory, &used_memory);
+            outputMemoryUtilization(total_memory, used_memory, i, samples, FIRST_SECTION_START_ROW);
+        }
+        if (show_cpu) {
+            double utilization;
+            read(cpu_pipe[0], &utilization, sizeof(utilization));
+            outputCPUUtilization(utilization, i, samples, show_memory ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW);
+        }
         delay(tdelay);
     }
-
-    // Main loop
-    if (show_cpu || show_memory) {
-        for (int i = 0; i < samples; i++) {
-            // Retrieve data.
-            if (show_memory) retrieveMemoryData(memory_info);
-            if (show_cpu) {
-                // Update previous CPU data and retrieve the new data.
-                memcpy(previous_cpu_usage, current_cpu_usage, 10 * sizeof(current_cpu_usage[0]));
-                retrieveCPUData(current_cpu_usage);
-            }
-
-
-            // Output data.
-            if (show_memory) {
-                // Print memory utilization.
-                double total_memory = 0;
-                double used_memory = 0;
-                processMemoryUtilization(memory_info, &total_memory, &used_memory);
-                outputMemoryUtilization(total_memory, used_memory, i, samples, FIRST_SECTION_START_ROW);
-            }
-
-            if (show_cpu) {
-                // Print CPU utilization.
-                outputCPUUtilization(processCPUUtilization(previous_cpu_usage, current_cpu_usage), i, samples, show_memory ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW);
-            }
-
-            // Waits tdelay microseconds.
-            delay(tdelay);
-        }
-    }
-
     
     if (show_cores) {
-        // cores_info contains the number of cores and the maximum frequency in that order.
         long cores_info[2];
-        retrieveCoresData(cores_info);
-
-        // Output cores and frequency.
+        read(cores_pipe[0], cores_info, sizeof(cores_info));
         int cores_start_row = show_memory || show_cpu ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW;
         if (show_cpu && show_memory) cores_start_row = THIRD_SECTION_START_ROW;
         outputCores(cores_info[0], cores_info[1], cores_start_row);
     }
-    
 
-    // Move cursor to bottom left.
+    if (show_memory) { close(memory_pipe[0]); waitpid(memory_pid, NULL, 0); }
+    if (show_cpu) { close(cpu_pipe[0]); waitpid(cpu_pid, NULL, 0); }
+    if (show_cores) { close(cores_pipe[0]); waitpid(cores_pid, NULL, 0); }
+
     printf(MOVE_CURSOR, 999, 0);
     exit(EXIT_SUCCESS);
 }

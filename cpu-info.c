@@ -23,12 +23,12 @@ void retrieveCPUData(long long cpu_usage[10]) {
 
 // Processes the CPU usage and returns the percent usage.
 double processCPUUtilization(long long previous_cpu_usage[10], long long current_cpu_usage[10]) {
-    // Finding the difference in total time.
+    // Finding the difference in total time (user + nice + system + idle + iowait + irq + softirq).
     long long total_time = 0;
-    for (int i = 0; i < 10; i++) total_time += current_cpu_usage[i] - previous_cpu_usage[i];
+    for (int i = 0; i < 7; i++) total_time += current_cpu_usage[i] - previous_cpu_usage[i];
 
-    // Finding the difference in idle time.
-    long long idle_time = current_cpu_usage[3] - previous_cpu_usage[3] + current_cpu_usage[4] - previous_cpu_usage[4];
+    // Finding the difference in idle time. (idle)
+    long long idle_time = current_cpu_usage[3] - previous_cpu_usage[3];
 
     // Returning CPU usage.
     return 100.0 - ((100.0 * idle_time) / (1.0 * total_time));
