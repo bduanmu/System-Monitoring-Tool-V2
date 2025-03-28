@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
+#include <errno.h>
 
 #include "memory-info.h"
 #include "cpu-info.h"
@@ -103,6 +105,9 @@ void coresProcess(int fd) {
 int main(int argc, char* argv[]) {
     // Disable output buffering.
     setbuf(stdout, NULL);
+
+    setbuf(stdout, NULL);
+    signal(SIGTSTP, SIG_IGN);
 
     // arguments holds the specifications of the program in a list in the following order: [samples, tdelay, memory, cpu, cores].
     // memory, cpu, and cores are boolean values.
