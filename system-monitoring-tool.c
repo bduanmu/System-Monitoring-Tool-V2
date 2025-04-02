@@ -80,7 +80,8 @@ void memoryProcess(int fd, int samples, int tdelay) {
 }
 
 void cpuProcess(int fd, int samples, int tdelay) {
-    long long previous_cpu_usage[10], current_cpu_usage[10];
+    long long previous_cpu_usage[10];
+    long long current_cpu_usage[10];
     retrieveCPUData(current_cpu_usage);
     delay(tdelay);
     for (int i = 0; i < samples; i++) {
@@ -106,7 +107,7 @@ int main(int argc, char* argv[]) {
     // Disable output buffering.
     setbuf(stdout, NULL);
 
-    setbuf(stdout, NULL);
+    // Ignore CTRL + Z
     signal(SIGTSTP, SIG_IGN);
 
     // arguments holds the specifications of the program in a list in the following order: [samples, tdelay, memory, cpu, cores].
