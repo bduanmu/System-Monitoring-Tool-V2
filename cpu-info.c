@@ -8,9 +8,10 @@
 void retrieveCPUData(long long cpu_usage[10]) {
     // Retrieving CPU times info.
     FILE* fcpu_usage = fopen("/proc/stat", "r");
+    // If unable to open file, return.
     if (!fcpu_usage) {
-        fprintf(stderr, "Error reading file\n");
-        exit(EXIT_FAILURE);
+        for (int i = 0; i < 10; i++) cpu_usage[i] = -1;
+        return;
     }
 
     // Getting CPU times from /proc/stat. First line is always "cpu" followed by the respective times.

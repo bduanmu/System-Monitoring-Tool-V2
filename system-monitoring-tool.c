@@ -68,7 +68,7 @@ void delay(unsigned int microseconds) {
     } while (elapsed < microseconds);
 }
 
-void memoryProcess(int fd, int samples, int tdelay) {
+void writeMemoryData(int fd, int samples, int tdelay) {
     long memory_info[2];
     for (int i = 0; i < samples; i++) {
         retrieveMemoryData(memory_info);
@@ -76,10 +76,10 @@ void memoryProcess(int fd, int samples, int tdelay) {
         delay(tdelay);
     }
     close(fd);
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
 
-void cpuProcess(int fd, int samples, int tdelay) {
+void writeCPUData(int fd, int samples, int tdelay) {
     long long previous_cpu_usage[10];
     long long current_cpu_usage[10];
     retrieveCPUData(current_cpu_usage);
@@ -87,20 +87,23 @@ void cpuProcess(int fd, int samples, int tdelay) {
     for (int i = 0; i < samples; i++) {
         memcpy(previous_cpu_usage, current_cpu_usage, sizeof(previous_cpu_usage));
         retrieveCPUData(current_cpu_usage);
-        double utilization = processCPUUtilization(previous_cpu_usage, current_cpu_usage);
+        double utilization = -1;
+        if (current_cpu_usage[0] != -1) {
+            utilization = processCPUUtilization(previous_cpu_usage, current_cpu_usage);
+        }
         write(fd, &utilization, sizeof(utilization));
         delay(tdelay);
     }
     close(fd);
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
 
-void coresProcess(int fd) {
+void writeCoresData(int fd) {
     long cores_info[2];
     retrieveCoresData(cores_info);
     write(fd, cores_info, sizeof(cores_info));
     close(fd);
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char* argv[]) {
@@ -123,7 +126,7 @@ int main(int argc, char* argv[]) {
     // Output number of samples and the delay between each sample.
     printf(CLEAR);
     printf(MOVE_CURSOR_TOP_LEFT);
-    printf("Nbr of samples: %d -- every %d microSecs (%.3f secs)", samples, tdelay, tdelay / (float)(METRIC_CONVERSION * METRIC_CONVERSION));
+    printf("Number of samples: %d -- every %d microSecs (%.3f secs)", samples, tdelay, tdelay / (float)(METRIC_CONVERSION * METRIC_CONVERSION));
 
     int memory_pipe[2], cpu_pipe[2], cores_pipe[2];
     pid_t memory_pid = -1, cpu_pid = -1, cores_pid = -1;
@@ -132,7 +135,7 @@ int main(int argc, char* argv[]) {
         pipe(memory_pipe);
         if ((memory_pid = fork()) == 0) {
             close(memory_pipe[0]);
-            memoryProcess(memory_pipe[1], samples, tdelay);
+            writeMemoryData(memory_pipe[1], samples, tdelay);
         }
         close(memory_pipe[1]);
     }
@@ -140,7 +143,7 @@ int main(int argc, char* argv[]) {
         pipe(cpu_pipe);
         if ((cpu_pid = fork()) == 0) {
             close(cpu_pipe[0]);
-            cpuProcess(cpu_pipe[1], samples, tdelay);
+            writeCPUData(cpu_pipe[1], samples, tdelay);
         }
         close(cpu_pipe[1]);
     }
@@ -148,25 +151,44 @@ int main(int argc, char* argv[]) {
         pipe(cores_pipe);
         if ((cores_pid = fork()) == 0) {
             close(cores_pipe[0]);
-            coresProcess(cores_pipe[1]);
+            writeCoresData(cores_pipe[1]);
         }
         close(cores_pipe[1]);
     }
 
-    for (int i = 0; i < samples; i++) {
-        if (show_memory) {
-            long memory_info[2];
-            read(memory_pipe[0], memory_info, sizeof(memory_info));
-            double total_memory = 0, used_memory = 0;
-            processMemoryUtilization(memory_info, &total_memory, &used_memory);
-            outputMemoryUtilization(total_memory, used_memory, i, samples, FIRST_SECTION_START_ROW);
+    if (show_memory || show_cpu) {
+        for (int i = 0; i < samples; i++) {
+            if (show_memory) {
+                long memory_info[2];
+                read(memory_pipe[0], memory_info, sizeof(memory_info));
+
+                // If unable to retrieve data, exit unsuccessfully.
+                if (memory_info[0] == -1 && memory_info[1] == -1) {
+                    fprintf(stderr, MOVE_CURSOR, FIRST_SECTION_START_ROW, 0);
+                    fprintf(stderr, "Error retrieving memory data.\n");
+                } else {
+                    double total_memory = 0;
+                    double used_memory = 0;
+                    processMemoryUtilization(memory_info, &total_memory, &used_memory);
+                    outputMemoryUtilization(total_memory, used_memory, i, samples, FIRST_SECTION_START_ROW);
+                }
+            }
+            if (show_cpu) {
+                double utilization;
+                read(cpu_pipe[0], &utilization, sizeof(utilization));
+
+                // If unable to retrieve data, exit unsuccessfully.
+                if (utilization == -1) {
+                    fprintf(stderr, MOVE_CURSOR, show_memory ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW, 0);
+                    fprintf(stderr, "Error retrieving CPU data.\n");
+                } else {
+                    outputCPUUtilization(utilization, i, samples, show_memory ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW);
+                }
+            }
+            
+            printf(MOVE_CURSOR, 999, 0);
+            delay(tdelay);
         }
-        if (show_cpu) {
-            double utilization;
-            read(cpu_pipe[0], &utilization, sizeof(utilization));
-            outputCPUUtilization(utilization, i, samples, show_memory ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW);
-        }
-        delay(tdelay);
     }
     
     if (show_cores) {
@@ -174,12 +196,28 @@ int main(int argc, char* argv[]) {
         read(cores_pipe[0], cores_info, sizeof(cores_info));
         int cores_start_row = show_memory || show_cpu ? SECOND_SECTION_START_ROW : FIRST_SECTION_START_ROW;
         if (show_cpu && show_memory) cores_start_row = THIRD_SECTION_START_ROW;
-        outputCores(cores_info[0], cores_info[1], cores_start_row);
+
+        // If unable to retrieve data, exit unsuccessfully.
+        if (cores_info[0] == -1 && cores_info[1] == -1) {
+            fprintf(stderr, MOVE_CURSOR, cores_start_row, 0);
+            fprintf(stderr, "Error retrieving cores data.\n");
+        } else {
+            outputCores(cores_info[0], cores_info[1], cores_start_row);
+        }
     }
 
-    if (show_memory) { close(memory_pipe[0]); waitpid(memory_pid, NULL, 0); }
-    if (show_cpu) { close(cpu_pipe[0]); waitpid(cpu_pid, NULL, 0); }
-    if (show_cores) { close(cores_pipe[0]); waitpid(cores_pid, NULL, 0); }
+    if (show_memory) {
+        close(memory_pipe[0]);
+        waitpid(memory_pid, NULL, 0);
+    }
+    if (show_cpu) {
+        close(cpu_pipe[0]);
+        waitpid(cpu_pid, NULL, 0);
+    }
+    if (show_cores) { 
+        close(cores_pipe[0]);
+        waitpid(cores_pid, NULL, 0);
+    }
 
     printf(MOVE_CURSOR, 999, 0);
     exit(EXIT_SUCCESS);

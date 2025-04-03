@@ -9,9 +9,11 @@
 void retrieveMemoryData(long memory_info[2]) {
     // Retrieving memory usage info.
     struct sysinfo system_info;
+    // If unable to open file, return.
     if (sysinfo(&system_info) != 0) {
-        fprintf(stderr, "Error getting system info\n");
-        exit(EXIT_FAILURE);
+        memory_info[0] = -1;
+        memory_info[1] = -1;
+        return;
     }
 
     // Setting the total RAM and free RAM.

@@ -9,9 +9,11 @@
 void retrieveCoresData(long info[2]) {
     // Getting core max frequency data.
     FILE* fcore_freq = fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r");
+    // If unable to open file, return.
     if (!fcore_freq) {
-        fprintf(stderr, "Error reading file\n");
-        exit(EXIT_FAILURE);
+        info[0] = -1;
+        info[1] = -1;
+        return;
     }
 
     // Getting max core frequency from the file. The file only contains one line with the max frequency in kHz. 
@@ -24,9 +26,11 @@ void retrieveCoresData(long info[2]) {
 
     // Getting number of cores
     FILE* fcpuinfo = fopen("/proc/cpuinfo", "r");
+    // If unable to open file, return.
     if (!fcpuinfo) {
-        fprintf(stderr, "Error reading file\n");
-        exit(EXIT_FAILURE);
+        info[0] = -1;
+        info[1] = -1;
+        return;
     }
 
     // Searching through the document for a line that starts with "siblings".
