@@ -5,8 +5,15 @@
 #include <string.h>
 #include <math.h>
 
-// Prints the formatted memory utilization graph.
 void outputMemoryUtilization(double total_memory, double used_memory, int current_sample, int total_samples, int start_row) {
+    ///_|> descry: this function outputs the memory utilization graph
+    ///_|> total_memory: the total memory of the machine in GiB, type double
+    ///_|> used_memory: the amount of memory in use in GiB, type double
+    ///_|> current_sample: the current sample number, type int
+    ///_|> total_samples: the total number of samples, type int
+    ///_|> start_row: the row to start printing the graph, type int
+    ///_|> returning: this function does not return anything
+
     // Move cursor to start of CPU section.
     printf(MOVE_CURSOR, start_row, 0);
     printf("v Memory  %.2f GB         ", used_memory);
@@ -28,8 +35,14 @@ void outputMemoryUtilization(double total_memory, double used_memory, int curren
     printf("#");
 }
 
-// Prints the formatted CPU utilization graph.
 void outputCPUUtilization(double precent_usage, int current_sample, int total_samples, int start_row) {
+    ///_|> descry: this function outputs the CPU utilization graph
+    ///_|> percent_usage: the percent of the CPU in use, type double
+    ///_|> current_sample: the current sample number, type int
+    ///_|> total_samples: the total number of samples, type int
+    ///_|> start_row: the row to start printing the graph, type int
+    ///_|> returning: this function does not return anything
+
     // Move cursor to start of CPU section.
     printf(MOVE_CURSOR, start_row, 0);
     printf("v CPU  %.2f %%              ", precent_usage);
@@ -50,8 +63,13 @@ void outputCPUUtilization(double precent_usage, int current_sample, int total_sa
     printf(":");
 }
 
-// Prints the formatted core info.
 void outputCores(long num_cores, long max_freq, int start_row) {
+    ///_|> descry: this function outputs the cores info
+    ///_|> num_cores: the number of cores, type long
+    ///_|> max_freq: the maximum frequency of each core in kHz, type long
+    ///_|> start_row: the row to start printing the info, type int
+    ///_|> returning: this function does not return anything
+
     // Move cursor to start of cores section.
     printf(MOVE_CURSOR, start_row, 0); 
     printf("v Number of Cores: %ld @ %.2f GHz", num_cores, max_freq / (float)(METRIC_CONVERSION * METRIC_CONVERSION));
