@@ -20,6 +20,22 @@
 #define STANDARD_SAMPLES 20
 #define STANDARD_TDELAY 500000
 
+void sigint() {
+    // Ask user for action using fgets
+    char input[10];
+    printf(MOVE_CURSOR, THIRD_SECTION_START_ROW, 0);
+    printf("Would you like to quit [y/n]? ");
+    if (fgets(input, sizeof(input), stdin) != NULL) {
+        // Remove newline if present
+        input[strcspn(input, "\n")] = 0;
+
+        if (strcmp(input, "y") == 0) exit(0);
+    }
+
+    printf(MOVE_CURSOR, THIRD_SECTION_START_ROW, 0);
+    printf(CLEAR_LINE);
+}
+
 // Processes command line arguments.
 // arguments holds the specifications of the program in a list in the following order: [samples, tdelay, memory, cpu, cores].
 // memory, cpu, and cores are boolean values.
@@ -128,12 +144,19 @@ int main(int argc, char* argv[]) {
     printf(MOVE_CURSOR_TOP_LEFT);
     printf("Number of samples: %d -- every %d microSecs (%.3f secs)", samples, tdelay, tdelay / (float)(METRIC_CONVERSION * METRIC_CONVERSION));
 
-    int memory_pipe[2], cpu_pipe[2], cores_pipe[2];
-    pid_t memory_pid = -1, cpu_pid = -1, cores_pid = -1;
+    int memory_pipe[2];
+    int cpu_pipe[2];
+    int cores_pipe[2];
+    pid_t memory_pid = -1;
+    pid_t cpu_pid = -1;
+    pid_t cores_pid = -1;
     
     if (show_memory) {
         pipe(memory_pipe);
         if ((memory_pid = fork()) == 0) {
+            // Ignore CTRL + C
+            signal(SIGINT, SIG_IGN);
+
             close(memory_pipe[0]);
             writeMemoryData(memory_pipe[1], samples, tdelay);
         }
@@ -142,6 +165,9 @@ int main(int argc, char* argv[]) {
     if (show_cpu) {
         pipe(cpu_pipe);
         if ((cpu_pid = fork()) == 0) {
+            // Ignore CTRL + C
+            signal(SIGINT, SIG_IGN);
+
             close(cpu_pipe[0]);
             writeCPUData(cpu_pipe[1], samples, tdelay);
         }
@@ -150,10 +176,22 @@ int main(int argc, char* argv[]) {
     if (show_cores) {
         pipe(cores_pipe);
         if ((cores_pid = fork()) == 0) {
+            // Ignore CTRL + C
+            signal(SIGINT, SIG_IGN);
+
             close(cores_pipe[0]);
             writeCoresData(cores_pipe[1]);
         }
         close(cores_pipe[1]);
+    }
+
+    // Handle CTRL + C
+    struct sigaction sa;
+    sa.sa_handler = sigint;
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("Error with signal handler. ");
+        exit(EXIT_FAILURE);
     }
 
     if (show_memory || show_cpu) {

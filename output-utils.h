@@ -3,6 +3,7 @@
 
 // ESCape codes
 #define CLEAR "\033[2J"
+#define CLEAR_LINE "\x1b[2K"
 #define MOVE_CURSOR_TOP_LEFT "\033[H"
 #define MOVE_CURSOR "\x1b[%d;%df"
 
