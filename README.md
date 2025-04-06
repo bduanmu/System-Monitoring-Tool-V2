@@ -65,6 +65,8 @@ This is the driver module and it has seven functions:
 ## Flow Chart
 ![Flow Chart](flow_chart.png)
 
+Note that the multiple arrows going out of "For each sample" represent concurrent processes, same with the arrows going out of "Parse CLAs".
+
 ## How to Compile
 This file uses a makefile. The `make all` or `make` rule compiles the program using the proper compiler and flags into an executable called `system-monitoring-tool` by linking all the `.c` files into a single executable. The `make clean` rule cleans the files by removing the `.o` files and the executable. 
 
